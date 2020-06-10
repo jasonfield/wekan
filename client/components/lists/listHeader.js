@@ -1,3 +1,5 @@
+import { Cookies } from 'meteor/ostrio:cookies';
+const cookies = new Cookies();
 let listsColors;
 Meteor.startup(() => {
   listsColors = Lists.simpleSchema()._schema.color.allowedValues;
@@ -7,9 +9,10 @@ BlazeComponent.extendComponent({
   canSeeAddCard() {
     const list = Template.currentData();
     return (
-      !list.getWipLimit('enabled') ||
-      list.getWipLimit('soft') ||
-      !this.reachedWipLimit()
+      (!list.getWipLimit('enabled') ||
+        list.getWipLimit('soft') ||
+        !this.reachedWipLimit()) &&
+      !Meteor.user().isWorker()
     );
   },
 
@@ -44,14 +47,18 @@ BlazeComponent.extendComponent({
   },
 
   limitToShowCardsCount() {
-    return Meteor.user().getLimitToShowCardsCount();
+    const currentUser = Meteor.user();
+    if (currentUser) {
+      return Meteor.user().getLimitToShowCardsCount();
+    } else {
+      return false;
+    }
   },
 
   cardsCount() {
     const list = Template.currentData();
     let swimlaneId = '';
-    const boardView = (Meteor.user().profile || {}).boardView;
-    if (boardView === 'board-view-swimlanes')
+    if (Utils.boardView() === 'board-view-swimlanes')
       swimlaneId = this.parentComponent()
         .parentComponent()
         .data()._id;
@@ -100,7 +107,14 @@ BlazeComponent.extendComponent({
 
 Template.listHeader.helpers({
   showDesktopDragHandles() {
-    return Meteor.user().hasShowDesktopDragHandles();
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).showDesktopDragHandles;
+    } else if (cookies.has('showDesktopDragHandles')) {
+      return true;
+    } else {
+      return false;
+    }
   },
 });
 
@@ -209,8 +223,35 @@ BlazeComponent.extendComponent({
 Template.listMorePopup.events({
   'click .js-delete': Popup.afterConfirm('listDelete', function() {
     Popup.close();
-    this.allCards().map(card => Cards.remove(card._id));
-    Lists.remove(this._id);
+    // TODO how can we avoid the fetch call?
+    const allCards = this.allCards().fetch();
+    const allCardIds = _.pluck(allCards, '_id');
+    // it's okay if the linked cards are on the same list
+    if (
+      Cards.find({
+        $and: [
+          { listId: { $ne: this._id } },
+          { linkedId: { $in: allCardIds } },
+        ],
+      }).count() === 0
+    ) {
+      allCardIds.map(_id => Cards.remove(_id));
+      Lists.remove(this._id);
+    } else {
+      // TODO: Figure out more informative message.
+      // Popup with a hint that the list cannot be deleted as there are
+      // linked cards. We can adapt the query above so we can list the linked
+      // cards.
+      // Related:
+      //   client/components/cards/cardDetails.js about line 969
+      //   https://github.com/wekan/wekan/issues/2785
+      const message = `${TAPi18n.__(
+        'delete-linked-cards-before-this-list',
+      )} linkedId: ${
+        this._id
+      } at client/components/lists/listHeader.js and https://github.com/wekan/wekan/issues/2785`;
+      alert(message);
+    }
     Utils.goBoardId(this.boardId);
   }),
 });

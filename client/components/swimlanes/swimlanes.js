@@ -1,4 +1,6 @@
-const { calculateIndex, enableClickOnTouch } = Utils;
+import { Cookies } from 'meteor/ostrio:cookies';
+const cookies = new Cookies();
+const { calculateIndex } = Utils;
 
 function currentListIsInThisSwimlane(swimlaneId) {
   const currentList = Lists.findOne(Session.get('currentList'));
@@ -14,15 +16,15 @@ function currentCardIsInThisList(listId, swimlaneId) {
   if (
     currentUser &&
     currentUser.profile &&
-    currentUser.profile.boardView === 'board-view-swimlanes'
+    Utils.boardView() === 'board-view-swimlanes'
   )
     return (
       currentCard &&
       currentCard.listId === listId &&
       currentCard.swimlaneId === swimlaneId
     );
-  // Default view: board-view-lists
   else return currentCard && currentCard.listId === listId;
+
   // https://github.com/wekan/wekan/issues/1623
   // https://github.com/ChronikEwok/wekan/commit/cad9b20451bb6149bfb527a99b5001873b06c3de
   // TODO: In public board, if you would like to switch between List/Swimlane view, you could
@@ -52,18 +54,6 @@ function initSortable(boardComponent, $listsDom) {
       }
     },
   };
-
-  if (Utils.isMiniScreen) {
-    $listsDom.sortable({
-      handle: '.js-list-handle',
-    });
-  }
-
-  if (!Utils.isMiniScreen && showDesktopDragHandles) {
-    $listsDom.sortable({
-      handle: '.js-list-header',
-    });
-  }
 
   $listsDom.sortable({
     tolerance: 'pointer',
@@ -97,26 +87,46 @@ function initSortable(boardComponent, $listsDom) {
     },
   });
 
-  // ugly touch event hotfix
-  enableClickOnTouch('.js-list:not(.js-list-composer)');
-
   function userIsMember() {
     return (
       Meteor.user() &&
       Meteor.user().isBoardMember() &&
-      !Meteor.user().isCommentOnly()
+      !Meteor.user().isCommentOnly() &&
+      !Meteor.user().isWorker()
     );
   }
 
-  // Disable drag-dropping while in multi-selection mode, or if the current user
-  // is not a board member
   boardComponent.autorun(() => {
+    let showDesktopDragHandles = false;
+    currentUser = Meteor.user();
+    if (currentUser) {
+      showDesktopDragHandles = (currentUser.profile || {})
+        .showDesktopDragHandles;
+    } else if (cookies.has('showDesktopDragHandles')) {
+      showDesktopDragHandles = true;
+    } else {
+      showDesktopDragHandles = false;
+    }
+
+    if (Utils.isMiniScreen() || showDesktopDragHandles) {
+      $listsDom.sortable({
+        handle: '.js-list-handle',
+      });
+    } else if (!Utils.isMiniScreen() && !showDesktopDragHandles) {
+      $listsDom.sortable({
+        handle: '.js-list-header',
+      });
+    }
+
     const $listDom = $listsDom;
-    if ($listDom.data('sortable')) {
+    if ($listDom.data('uiSortable') || $listDom.data('sortable')) {
       $listsDom.sortable(
         'option',
         'disabled',
-        MultiSelection.isActive() || !userIsMember(),
+        // Disable drag-dropping when user is not member/is worker
+        !userIsMember() || Meteor.user().isWorker(),
+        // Not disable drag-dropping while in multi-selection mode
+        // MultiSelection.isActive() || !userIsMember(),
       );
     }
   });
@@ -163,8 +173,19 @@ BlazeComponent.extendComponent({
           // the user will legitimately expect to be able to select some text with
           // his mouse.
 
+          let showDesktopDragHandles = false;
+          currentUser = Meteor.user();
+          if (currentUser) {
+            showDesktopDragHandles = (currentUser.profile || {})
+              .showDesktopDragHandles;
+          } else if (cookies.has('showDesktopDragHandles')) {
+            showDesktopDragHandles = true;
+          } else {
+            showDesktopDragHandles = false;
+          }
+
           const noDragInside = ['a', 'input', 'textarea', 'p'].concat(
-            Util.isMiniScreen || (!Util.isMiniScreen && showDesktopDragHandles)
+            Utils.isMiniScreen() || showDesktopDragHandles
               ? ['.js-list-handle', '.js-swimlane-header-handle']
               : ['.js-list-header'],
           );
@@ -245,13 +266,21 @@ BlazeComponent.extendComponent({
 
 Template.swimlane.helpers({
   showDesktopDragHandles() {
-    return Meteor.user().hasShowDesktopDragHandles();
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).showDesktopDragHandles;
+    } else if (cookies.has('showDesktopDragHandles')) {
+      return true;
+    } else {
+      return false;
+    }
   },
   canSeeAddList() {
     return (
       Meteor.user() &&
       Meteor.user().isBoardMember() &&
-      !Meteor.user().isCommentOnly()
+      !Meteor.user().isCommentOnly() &&
+      !Meteor.user().isWorker()
     );
   },
 });

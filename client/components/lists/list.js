@@ -1,4 +1,6 @@
-const { calculateIndex, enableClickOnTouch } = Utils;
+import { Cookies } from 'meteor/ostrio:cookies';
+const cookies = new Cookies();
+const { calculateIndex } = Utils;
 
 BlazeComponent.extendComponent({
   // Proxy
@@ -30,18 +32,6 @@ BlazeComponent.extendComponent({
 
     const itemsSelector = '.js-minicard:not(.placeholder, .js-card-composer)';
     const $cards = this.$('.js-minicards');
-
-    if (Utils.isMiniScreen) {
-      $('.js-minicards').sortable({
-        handle: '.handle',
-      });
-    }
-
-    if (!Utils.isMiniScreen && showDesktopDragHandles) {
-      $('.js-minicards').sortable({
-        handle: '.handle',
-      });
-    }
 
     $cards.sortable({
       connectWith: '.js-minicards:not(.js-list-full)',
@@ -84,19 +74,16 @@ BlazeComponent.extendComponent({
         const sortIndex = calculateIndex(prevCardDom, nextCardDom, nCards);
         const listId = Blaze.getData(ui.item.parents('.list').get(0))._id;
         const currentBoard = Boards.findOne(Session.get('currentBoard'));
-        let swimlaneId = '';
-        const boardView = (Meteor.user().profile || {}).boardView;
+        const defaultSwimlaneId = currentBoard.getDefaultSwimline()._id;
+        let targetSwimlaneId = null;
+
+        // only set a new swimelane ID if the swimlanes view is active
         if (
-          boardView === 'board-view-swimlanes' ||
+          Utils.boardView() === 'board-view-swimlanes' ||
           currentBoard.isTemplatesBoard()
         )
-          swimlaneId = Blaze.getData(ui.item.parents('.swimlane').get(0))._id;
-        else if (
-          boardView === 'board-view-lists' ||
-          boardView === 'board-view-cal' ||
-          !boardView
-        )
-          swimlaneId = currentBoard.getDefaultSwimline()._id;
+          targetSwimlaneId = Blaze.getData(ui.item.parents('.swimlane').get(0))
+            ._id;
 
         // Normally the jquery-ui sortable library moves the dragged DOM element
         // to its new position, which disrupts Blaze reactive updates mechanism
@@ -109,9 +96,12 @@ BlazeComponent.extendComponent({
 
         if (MultiSelection.isActive()) {
           Cards.find(MultiSelection.getMongoSelector()).forEach((card, i) => {
+            const newSwimlaneId = targetSwimlaneId
+              ? targetSwimlaneId
+              : card.swimlaneId || defaultSwimlaneId;
             card.move(
               currentBoard._id,
-              swimlaneId,
+              newSwimlaneId,
               listId,
               sortIndex.base + i * sortIndex.increment,
             );
@@ -119,18 +109,47 @@ BlazeComponent.extendComponent({
         } else {
           const cardDomElement = ui.item.get(0);
           const card = Blaze.getData(cardDomElement);
-          card.move(currentBoard._id, swimlaneId, listId, sortIndex.base);
+          const newSwimlaneId = targetSwimlaneId
+            ? targetSwimlaneId
+            : card.swimlaneId || defaultSwimlaneId;
+          card.move(currentBoard._id, newSwimlaneId, listId, sortIndex.base);
         }
         boardComponent.setIsDragging(false);
       },
     });
 
-    // ugly touch event hotfix
-    enableClickOnTouch(itemsSelector);
-
-    // Disable drag-dropping if the current user is not a board member or is comment only
     this.autorun(() => {
-      $cards.sortable('option', 'disabled', !userIsMember());
+      let showDesktopDragHandles = false;
+      currentUser = Meteor.user();
+      if (currentUser) {
+        showDesktopDragHandles = (currentUser.profile || {})
+          .showDesktopDragHandles;
+      } else if (cookies.has('showDesktopDragHandles')) {
+        showDesktopDragHandles = true;
+      } else {
+        showDesktopDragHandles = false;
+      }
+
+      if (Utils.isMiniScreen() || showDesktopDragHandles) {
+        $cards.sortable({
+          handle: '.handle',
+        });
+      } else if (!Utils.isMiniScreen() && !showDesktopDragHandles) {
+        $cards.sortable({
+          handle: '.minicard',
+        });
+      }
+
+      if ($cards.data('uiSortable') || $cards.data('sortable')) {
+        $cards.sortable(
+          'option',
+          'disabled',
+          // Disable drag-dropping when user is not member
+          !userIsMember(),
+          // Not disable drag-dropping while in multi-selection mode
+          // MultiSelection.isActive() || !userIsMember(),
+        );
+      }
     });
 
     // We want to re-run this function any time a card is added.
@@ -163,7 +182,14 @@ BlazeComponent.extendComponent({
 
 Template.list.helpers({
   showDesktopDragHandles() {
-    return Meteor.user().hasShowDesktopDragHandles();
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).showDesktopDragHandles;
+    } else if (cookies.has('showDesktopDragHandles')) {
+      return true;
+    } else {
+      return false;
+    }
   },
 });
 

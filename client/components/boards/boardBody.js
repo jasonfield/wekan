@@ -1,5 +1,7 @@
+import { Cookies } from 'meteor/ostrio:cookies';
+const cookies = new Cookies();
 const subManager = new SubsManager();
-const { calculateIndex, enableClickOnTouch } = Utils;
+const { calculateIndex } = Utils;
 const swimlaneWhileSortingHeight = 150;
 
 BlazeComponent.extendComponent({
@@ -89,7 +91,6 @@ BlazeComponent.extendComponent({
         helper.append(list.clone());
         return helper;
       },
-      handle: '.js-swimlane-header-handle',
       items: '.swimlane:not(.placeholder)',
       placeholder: 'swimlane placeholder',
       distance: 7,
@@ -190,8 +191,30 @@ BlazeComponent.extendComponent({
       },
     });
 
-    // ugly touch event hotfix
-    enableClickOnTouch('.js-swimlane:not(.placeholder)');
+    this.autorun(() => {
+      let showDesktopDragHandles = false;
+      currentUser = Meteor.user();
+      if (currentUser) {
+        showDesktopDragHandles = (currentUser.profile || {})
+          .showDesktopDragHandles;
+      } else if (cookies.has('showDesktopDragHandles')) {
+        showDesktopDragHandles = true;
+      } else {
+        showDesktopDragHandles = false;
+      }
+      if (Utils.isMiniScreen() || showDesktopDragHandles) {
+        $swimlanesDom.sortable({
+          handle: '.js-swimlane-header-handle',
+        });
+      } else if (!Utils.isMiniScreen() && !showDesktopDragHandles) {
+        $swimlanesDom.sortable({
+          handle: '.swimlane-header',
+        });
+      }
+
+      // Disable drag-dropping if the current user is not a board member
+      $swimlanesDom.sortable('option', 'disabled', !userIsMember());
+    });
 
     function userIsMember() {
       return (
@@ -210,21 +233,30 @@ BlazeComponent.extendComponent({
   },
 
   isViewSwimlanes() {
-    const currentUser = Meteor.user();
-    if (!currentUser) return false;
-    return (currentUser.profile || {}).boardView === 'board-view-swimlanes';
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).boardView === 'board-view-swimlanes';
+    } else {
+      return cookies.get('boardView') === 'board-view-swimlanes';
+    }
   },
 
   isViewLists() {
-    const currentUser = Meteor.user();
-    if (!currentUser) return true;
-    return (currentUser.profile || {}).boardView === 'board-view-lists';
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).boardView === 'board-view-lists';
+    } else {
+      return cookies.get('boardView') === 'board-view-lists';
+    }
   },
 
   isViewCalendar() {
-    const currentUser = Meteor.user();
-    if (!currentUser) return false;
-    return (currentUser.profile || {}).boardView === 'board-view-cal';
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).boardView === 'board-view-cal';
+    } else {
+      return cookies.get('boardView') === 'board-view-cal';
+    }
   },
 
   openNewListForm() {
@@ -291,7 +323,7 @@ BlazeComponent.extendComponent({
       header: {
         left: 'title   today prev,next',
         center:
-          'agendaDay,listDay,timelineDay agendaWeek,listWeek,timelineWeek month,timelineMonth timelineYear',
+          'agendaDay,listDay,timelineDay agendaWeek,listWeek,timelineWeek month,listMonth',
         right: '',
       },
       // height: 'parent', nope, doesn't work as the parent might be small
@@ -381,8 +413,11 @@ BlazeComponent.extendComponent({
     };
   },
   isViewCalendar() {
-    const currentUser = Meteor.user();
-    if (!currentUser) return false;
-    return (currentUser.profile || {}).boardView === 'board-view-cal';
+    currentUser = Meteor.user();
+    if (currentUser) {
+      return (currentUser.profile || {}).boardView === 'board-view-cal';
+    } else {
+      return cookies.get('boardView') === 'board-view-cal';
+    }
   },
 }).register('calendarView');

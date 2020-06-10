@@ -119,6 +119,9 @@ Migrations.add('use-css-class-for-boards-colors', () => {
     '#2C3E51': 'dark',
     '#27AE61': 'relax',
     '#568BA2': 'corteza',
+    '#499BEA': 'clearblue',
+    '#596557': 'natural',
+    '#2A80B8': 'modern',
   };
   Boards.find().forEach(board => {
     const oldBoardColor = board.background.color;
@@ -240,19 +243,6 @@ Migrations.add('add-checklist-items', () => {
       { $unset: { items: 1 } },
       noValidate,
     );
-  });
-});
-
-Migrations.add('add-profile-view', () => {
-  Users.find().forEach(user => {
-    if (!user.hasOwnProperty('profile.boardView')) {
-      // Set default view
-      Users.direct.update(
-        { _id: user._id },
-        { $set: { 'profile.boardView': 'board-view-lists' } },
-        noValidate,
-      );
-    }
   });
 });
 
@@ -466,38 +456,6 @@ Migrations.add('add-hide-logo', () => {
     {
       $set: {
         hideLogo: false,
-      },
-    },
-    noValidateMulti,
-  );
-});
-
-Migrations.add('add-custom-html-after-body-start', () => {
-  Settings.update(
-    {
-      customHTMLafterBodyStart: {
-        $exists: false,
-      },
-    },
-    {
-      $set: {
-        customHTMLafterBodyStart: '',
-      },
-    },
-    noValidateMulti,
-  );
-});
-
-Migrations.add('add-custom-html-before-body-end', () => {
-  Settings.update(
-    {
-      customHTMLbeforeBodyEnd: {
-        $exists: false,
-      },
-    },
-    {
-      $set: {
-        customHTMLbeforeBodyEnd: '',
       },
     },
     noValidateMulti,
@@ -776,4 +734,313 @@ Migrations.add('fix-incorrect-dates', () => {
         );
       }),
   );
+});
+
+Migrations.add('add-assignee', () => {
+  Cards.update(
+    {
+      assignees: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        assignees: [],
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-profile-showDesktopDragHandles', () => {
+  Users.update(
+    {
+      'profile.showDesktopDragHandles': {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        'profile.showDesktopDragHandles': false,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-profile-hiddenMinicardLabelText', () => {
+  Users.update(
+    {
+      'profile.hiddenMinicardLabelText': {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        'profile.hiddenMinicardLabelText': false,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-receiveddate-allowed', () => {
+  Boards.update(
+    {
+      allowsReceivedDate: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsReceivedDate: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-startdate-allowed', () => {
+  Boards.update(
+    {
+      allowsStartDate: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsStartDate: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-duedate-allowed', () => {
+  Boards.update(
+    {
+      allowsDueDate: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsDueDate: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-enddate-allowed', () => {
+  Boards.update(
+    {
+      allowsEndDate: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsEndDate: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-members-allowed', () => {
+  Boards.update(
+    {
+      allowsMembers: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsMembers: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-assignee-allowed', () => {
+  Boards.update(
+    {
+      allowsAssignee: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsAssignee: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-labels-allowed', () => {
+  Boards.update(
+    {
+      allowsLabels: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsLabels: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-checklists-allowed', () => {
+  Boards.update(
+    {
+      allowsChecklists: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsChecklists: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-attachments-allowed', () => {
+  Boards.update(
+    {
+      allowsAttachments: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsAttachments: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-comments-allowed', () => {
+  Boards.update(
+    {
+      allowsComments: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsComments: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-assigned-by-allowed', () => {
+  Boards.update(
+    {
+      allowsAssignedBy: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsAssignedBy: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-requested-by-allowed', () => {
+  Boards.update(
+    {
+      allowsRequestedBy: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsRequestedBy: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-activities-allowed', () => {
+  Boards.update(
+    {
+      allowsActivities: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsActivities: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-description-title-allowed', () => {
+  Boards.update(
+    {
+      allowsDescriptionTitle: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsDescriptionTitle: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-description-text-allowed', () => {
+  Boards.update(
+    {
+      allowsDescriptionText: {
+        $exists: false,
+      },
+    },
+    {
+      $set: {
+        allowsDescriptionText: true,
+      },
+    },
+    noValidateMulti,
+  );
+});
+
+Migrations.add('add-sort-field-to-boards', () => {
+  Boards.find().forEach((board, index) => {
+    if (!board.hasOwnProperty('sort')) {
+      Boards.direct.update(board._id, { $set: { sort: index } }, noValidate);
+    }
+  });
+});
+
+Migrations.add('add-default-profile-view', () => {
+  Users.find().forEach(user => {
+    if (!user.hasOwnProperty('profile.boardView')) {
+      // Set default view
+      Users.direct.update(
+        { _id: user._id },
+        { $set: { 'profile.boardView': 'board-view-swimlanes' } },
+        noValidate,
+      );
+    }
+  });
 });

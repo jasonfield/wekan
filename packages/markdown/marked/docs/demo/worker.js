@@ -1,4 +1,5 @@
-/* globals marked, unfetch, ES6Promise */
+/* globals marked, unfetch, ES6Promise, Promise */ // eslint-disable-line no-redeclare
+
 if (!self.Promise) {
   self.importScripts('https://cdn.jsdelivr.net/npm/es6-promise/dist/es6-promise.js');
   self.Promise = ES6Promise;
@@ -11,15 +12,15 @@ if (!self.fetch) {
 var versionCache = {};
 var currentVersion;
 
-onunhandledrejection = function (e) {
+onunhandledrejection = function(e) {
   throw e.reason;
 };
 
-onmessage = function (e) {
+onmessage = function(e) {
   if (e.data.version === currentVersion) {
     parse(e);
   } else {
-    loadVersion(e.data.version).then(function () {
+    loadVersion(e.data.version).then(function() {
       parse(e);
     });
   }
@@ -48,38 +49,55 @@ function parse(e) {
     case 'parse':
       var startTime = new Date();
       var lexed = marked.lexer(e.data.markdown, e.data.options);
-      var lexedList = [];
-      for (var i = 0; i < lexed.length; i++) {
-        var lexedLine = [];
-        for (var j in lexed[i]) {
-          lexedLine.push(j + ':' + jsonString(lexed[i][j]));
-        }
-        lexedList.push('{' + lexedLine.join(', ') + '}');
-      }
+      var lexedList = jsonString(lexed);
       var parsed = marked.parser(lexed, e.data.options);
       var endTime = new Date();
-      // setTimeout(function () {
       postMessage({
         task: e.data.task,
-        lexed: lexedList.join('\n'),
+        lexed: lexedList,
         parsed: parsed,
         time: endTime - startTime
       });
-      // }, 10000);
       break;
   }
 }
 
-function jsonString(input) {
-  var output = (input + '')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t')
-    .replace(/\f/g, '\\f')
-    .replace(/[\\"']/g, '\\$&')
-    .replace(/\u0000/g, '\\0');
-  return '"' + output + '"';
-};
+function stringRepeat(char, times) {
+  var s = '';
+  for (var i = 0; i < times; i++) {
+    s += char;
+  }
+  return s;
+}
+
+function jsonString(input, level) {
+  level = level || 0;
+  if (Array.isArray(input)) {
+    if (input.length === 0) {
+      return '[]';
+    }
+    var items = [],
+        i;
+    if (!Array.isArray(input[0]) && typeof input[0] === 'object' && input[0] !== null) {
+      for (i = 0; i < input.length; i++) {
+        items.push(stringRepeat(' ', 2 * level) + jsonString(input[i], level + 1));
+      }
+      return '[\n' + items.join('\n') + '\n]';
+    }
+    for (i = 0; i < input.length; i++) {
+      items.push(jsonString(input[i], level));
+    }
+    return '[' + items.join(', ') + ']';
+  } else if (typeof input === 'object' && input !== null) {
+    var props = [];
+    for (var prop in input) {
+      props.push(prop + ':' + jsonString(input[prop], level));
+    }
+    return '{' + props.join(', ') + '}';
+  } else {
+    return JSON.stringify(input);
+  }
+}
 
 function loadVersion(ver) {
   var promise;
@@ -87,13 +105,13 @@ function loadVersion(ver) {
     promise = Promise.resolve(versionCache[ver]);
   } else {
     promise = fetch(ver)
-      .then(function (res) { return res.text(); })
-      .then(function (text) {
+      .then(function(res) { return res.text(); })
+      .then(function(text) {
         versionCache[ver] = text;
         return text;
       });
   }
-  return promise.then(function (text) {
+  return promise.then(function(text) {
     try {
       // eslint-disable-next-line no-new-func
       Function(text)();

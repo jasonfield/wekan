@@ -1,5 +1,7 @@
+/*
 const DOWNCLS = 'fa-sort-down';
 const UPCLS = 'fa-sort-up';
+*/
 Template.boardMenuPopup.events({
   'click .js-rename-board': Popup.open('boardChangeTitle'),
   'click .js-custom-fields'() {
@@ -28,22 +30,7 @@ Template.boardMenuPopup.events({
   'click .js-outgoing-webhooks': Popup.open('outgoingWebhooks'),
   'click .js-import-board': Popup.open('chooseBoardSource'),
   'click .js-subtask-settings': Popup.open('boardSubtaskSettings'),
-});
-
-Template.boardMenuPopup.helpers({
-  exportUrl() {
-    const params = {
-      boardId: Session.get('currentBoard'),
-    };
-    const queryParams = {
-      authToken: Accounts._storedLoginToken(),
-    };
-    return FlowRouter.path('/api/boards/:boardId/export', params, queryParams);
-  },
-  exportFilename() {
-    const boardId = Session.get('currentBoard');
-    return `wekan-export-board-${boardId}.json`;
-  },
+  'click .js-card-settings': Popup.open('boardCardSettings'),
 });
 
 Template.boardChangeTitlePopup.events({
@@ -82,6 +69,7 @@ BlazeComponent.extendComponent({
     const currentBoard = Boards.findOne(Session.get('currentBoard'));
     return currentBoard && currentBoard.stars >= 2;
   },
+  /*
   showSort() {
     return Meteor.user().hasSortBy();
   },
@@ -101,6 +89,7 @@ BlazeComponent.extendComponent({
   listSortShortDesc() {
     return `list-label-short-${this.currentListSortBy()}`;
   },
+  */
   events() {
     return [
       {
@@ -114,30 +103,14 @@ BlazeComponent.extendComponent({
         'click .js-open-archived-board'() {
           Modal.open('archivedBoards');
         },
-        'click .js-toggle-board-view'() {
-          const currentUser = Meteor.user();
-          if (
-            (currentUser.profile || {}).boardView === 'board-view-swimlanes'
-          ) {
-            currentUser.setBoardView('board-view-cal');
-          } else if (
-            (currentUser.profile || {}).boardView === 'board-view-lists'
-          ) {
-            currentUser.setBoardView('board-view-swimlanes');
-          } else if (
-            (currentUser.profile || {}).boardView === 'board-view-cal'
-          ) {
-            currentUser.setBoardView('board-view-lists');
-          } else {
-            currentUser.setBoardView('board-view-swimlanes');
-          }
-        },
+        'click .js-toggle-board-view': Popup.open('boardChangeView'),
         'click .js-toggle-sidebar'() {
           Sidebar.toggle();
         },
         'click .js-open-filter-view'() {
           Sidebar.setView('filter');
         },
+        /*
         'click .js-open-sort-view'(evt) {
           const target = evt.target;
           if (target.tagName === 'I') {
@@ -148,6 +121,7 @@ BlazeComponent.extendComponent({
             Popup.open('listsort')(evt);
           }
         },
+        */
         'click .js-filter-reset'(event) {
           event.stopPropagation();
           Sidebar.setView();
@@ -155,9 +129,6 @@ BlazeComponent.extendComponent({
         },
         'click .js-open-search-view'() {
           Sidebar.setView('search');
-        },
-        'click .js-open-rules-view'() {
-          Modal.openWide('rulesMain');
         },
         'click .js-multiselection-activate'() {
           const currentCard = Session.get('currentCard');
@@ -185,6 +156,24 @@ Template.boardHeaderBar.helpers({
       Meteor.user().isBoardMember() &&
       !Meteor.user().isCommentOnly()
     );
+  },
+  boardView() {
+    return Utils.boardView();
+  },
+});
+
+Template.boardChangeViewPopup.events({
+  'click .js-open-lists-view'() {
+    Utils.setBoardView('board-view-lists');
+    Popup.close();
+  },
+  'click .js-open-swimlanes-view'() {
+    Utils.setBoardView('board-view-swimlanes');
+    Popup.close();
+  },
+  'click .js-open-cal-view'() {
+    Utils.setBoardView('board-view-cal');
+    Popup.close();
   },
 });
 
@@ -308,6 +297,7 @@ BlazeComponent.extendComponent({
   },
 }).register('boardChangeWatchPopup');
 
+/*
 BlazeComponent.extendComponent({
   onCreated() {
     //this.sortBy = new ReactiveVar();
@@ -377,3 +367,4 @@ BlazeComponent.extendComponent({
     ];
   },
 }).register('listsortPopup');
+*/

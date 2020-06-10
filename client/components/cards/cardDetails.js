@@ -1,5 +1,5 @@
 const subManager = new SubsManager();
-const { calculateIndexData, enableClickOnTouch } = Utils;
+const { calculateIndexData } = Utils;
 
 let cardColors;
 Meteor.startup(() => {
@@ -38,6 +38,22 @@ BlazeComponent.extendComponent({
     Meteor.subscribe('unsaved-edits');
   },
 
+  voteState() {
+    const card = this.currentData();
+    const userId = Meteor.userId();
+    let state;
+    if (card.vote) {
+      if (card.vote.positive) {
+        state = _.contains(card.vote.positive, userId);
+        if (state === true) return true;
+      }
+      if (card.vote.negative) {
+        state = _.contains(card.vote.negative, userId);
+        if (state === true) return false;
+      }
+    }
+    return null;
+  },
   isWatching() {
     const card = this.currentData();
     return card.findWatcher(Meteor.userId());
@@ -51,17 +67,25 @@ BlazeComponent.extendComponent({
     return (
       Meteor.user() &&
       Meteor.user().isBoardMember() &&
-      !Meteor.user().isCommentOnly()
+      !Meteor.user().isCommentOnly() &&
+      !Meteor.user().isWorker()
     );
   },
 
   scrollParentContainer() {
     const cardPanelWidth = 510;
-    const bodyBoardComponent = this.parentComponent().parentComponent();
+    const parentComponent = this.parentComponent();
+    // TODO sometimes parentComponent is not available, maybe because it's not
+    // yet created?!
+    if (!parentComponent) return;
+    const bodyBoardComponent = parentComponent.parentComponent();
     //On Mobile View Parent is Board, Not Board Body. I cant see how this funciton should work then.
     if (bodyBoardComponent === null) return;
     const $cardView = this.$(this.firstNode());
     const $cardContainer = bodyBoardComponent.$('.js-swimlanes');
+    // TODO sometimes cardContainer is not available, maybe because it's not yet
+    // created?!
+    if (!$cardContainer) return;
     const cardContainerScroll = $cardContainer.scrollLeft();
     const cardContainerWidth = $cardContainer.width();
 
@@ -114,6 +138,15 @@ BlazeComponent.extendComponent({
       }
     }
     return result;
+  },
+
+  showVotingButtons() {
+    const card = this.currentData();
+    return (
+      (currentUser.isBoardMember() ||
+        (currentUser && card.voteAllowNonBoardMembers())) &&
+      !card.expiredVote()
+    );
   },
 
   onRendered() {
@@ -199,9 +232,6 @@ BlazeComponent.extendComponent({
       },
     });
 
-    // ugly touch event hotfix
-    enableClickOnTouch('.card-checklist-items .js-checklist');
-
     const $subtasksDom = this.$('.card-subtasks-items');
 
     $subtasksDom.sortable({
@@ -237,20 +267,21 @@ BlazeComponent.extendComponent({
       },
     });
 
-    // ugly touch event hotfix
-    enableClickOnTouch('.card-subtasks-items .js-subtasks');
-
     function userIsMember() {
       return Meteor.user() && Meteor.user().isBoardMember();
     }
 
     // Disable sorting if the current user is not a board member
     this.autorun(() => {
-      if ($checklistsDom.data('sortable')) {
-        $checklistsDom.sortable('option', 'disabled', !userIsMember());
+      const disabled = !userIsMember() || Utils.isMiniScreen();
+      if (
+        $checklistsDom.data('uiSortable') ||
+        $checklistsDom.data('sortable')
+      ) {
+        $checklistsDom.sortable('option', 'disabled', disabled);
       }
-      if ($subtasksDom.data('sortable')) {
-        $subtasksDom.sortable('option', 'disabled', !userIsMember());
+      if ($subtasksDom.data('uiSortable') || $subtasksDom.data('sortable')) {
+        $subtasksDom.sortable('option', 'disabled', disabled);
       }
     });
   },
@@ -278,6 +309,29 @@ BlazeComponent.extendComponent({
         'click .js-close-card-details'() {
           Utils.goBoardId(this.data().boardId);
         },
+        'click .js-copy-link'() {
+          StringToCopyElement = document.getElementById('cardURL_copy');
+          StringToCopyElement.select();
+          if (document.execCommand('copy')) {
+            StringToCopyElement.blur();
+          } else {
+            document.getElementById('cardURL_copy').selectionStart = 0;
+            document.getElementById('cardURL_copy').selectionEnd = 999;
+            document.execCommand('copy');
+            if (window.getSelection) {
+              if (window.getSelection().empty) {
+                // Chrome
+                window.getSelection().empty();
+              } else if (window.getSelection().removeAllRanges) {
+                // Firefox
+                window.getSelection().removeAllRanges();
+              }
+            } else if (document.selection) {
+              // IE?
+              document.selection.empty();
+            }
+          }
+        },
         'click .js-open-card-details-menu': Popup.open('cardDetailsActions'),
         'submit .js-card-description'(event) {
           event.preventDefault();
@@ -291,6 +345,8 @@ BlazeComponent.extendComponent({
             .trim();
           if (title) {
             this.data().setTitle(title);
+          } else {
+            this.data().setTitle('');
           }
         },
         'submit .js-card-details-assigner'(event) {
@@ -300,6 +356,8 @@ BlazeComponent.extendComponent({
             .trim();
           if (assigner) {
             this.data().setAssignedBy(assigner);
+          } else {
+            this.data().setAssignedBy('');
           }
         },
         'submit .js-card-details-requester'(event) {
@@ -309,7 +367,12 @@ BlazeComponent.extendComponent({
             .trim();
           if (requester) {
             this.data().setRequestedBy(requester);
+          } else {
+            this.data().setRequestedBy('');
           }
+        },
+        'click .js-go-to-linked-card'() {
+          Utils.goCardId(this.data().linkedId);
         },
         'click .js-member': Popup.open('cardMember'),
         'click .js-add-members': Popup.open('cardMembers'),
@@ -320,6 +383,8 @@ BlazeComponent.extendComponent({
         'click .js-start-date': Popup.open('editCardStartDate'),
         'click .js-due-date': Popup.open('editCardDueDate'),
         'click .js-end-date': Popup.open('editCardEndDate'),
+        'click .js-show-positive-votes': Popup.open('positiveVoteMembers'),
+        'click .js-show-negative-votes': Popup.open('negativeVoteMembers'),
         'mouseenter .js-card-details'() {
           const parentComponent = this.parentComponent().parentComponent();
           //on mobile view parent is Board, not BoardBody.
@@ -343,6 +408,18 @@ BlazeComponent.extendComponent({
         'click #toggleButton'() {
           Meteor.call('toggleSystemMessages');
         },
+        'click .js-vote'(e) {
+          const forIt = $(e.target).hasClass('js-vote-positive');
+          let newState = null;
+          if (
+            this.voteState() === null ||
+            (this.voteState() === false && forIt) ||
+            (this.voteState() === true && !forIt)
+          ) {
+            newState = forIt;
+          }
+          this.data().setVote(Meteor.userId(), newState);
+        },
       },
     ];
   },
@@ -364,8 +441,72 @@ Template.cardDetails.helpers({
     });
   },
 
+  receivedSelected() {
+    if (this.getReceived().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  startSelected() {
+    if (this.getStart().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  endSelected() {
+    if (this.getEnd().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  dueSelected() {
+    if (this.getDue().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  memberSelected() {
+    if (this.getMembers().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  labelSelected() {
+    if (this.getLabels().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
   assigneeSelected() {
     if (this.getAssignees().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  requestBySelected() {
+    if (this.getRequestBy().length === 0) {
+      return false;
+    } else {
+      return true;
+    }
+  },
+
+  assigneeBySelected() {
+    if (this.getAssigneeBy().length === 0) {
       return false;
     } else {
       return true;
@@ -460,6 +601,7 @@ Template.cardDetailsActionsPopup.events({
   'click .js-assignees': Popup.open('cardAssignees'),
   'click .js-labels': Popup.open('cardLabels'),
   'click .js-attachments': Popup.open('cardAttachments'),
+  'click .js-start-voting': Popup.open('cardStartVoting'),
   'click .js-custom-fields': Popup.open('cardCustomFields'),
   'click .js-received-date': Popup.open('editCardReceivedDate'),
   'click .js-start-date': Popup.open('editCardStartDate'),
@@ -572,7 +714,7 @@ BlazeComponent.extendComponent({
         _id: { $ne: Meteor.user().getTemplatesBoardId() },
       },
       {
-        sort: ['title'],
+        sort: { sort: 1 /* boards default sorting */ },
       },
     );
     return boards;
@@ -748,7 +890,7 @@ BlazeComponent.extendComponent({
         },
       },
       {
-        sort: ['title'],
+        sort: { sort: 1 /* boards default sorting */ },
       },
     );
     return boards;
@@ -821,7 +963,23 @@ BlazeComponent.extendComponent({
         },
         'click .js-delete': Popup.afterConfirm('cardDelete', function() {
           Popup.close();
-          Cards.remove(this._id);
+          // verify that there are no linked cards
+          if (Cards.find({ linkedId: this._id }).count() === 0) {
+            Cards.remove(this._id);
+          } else {
+            // TODO: Maybe later we can list where the linked cards are.
+            // Now here is popup with a hint that the card cannot be deleted
+            // as there are linked cards.
+            // Related:
+            //   client/components/lists/listHeader.js about line 248
+            //   https://github.com/wekan/wekan/issues/2785
+            const message = `${TAPi18n.__(
+              'delete-linked-card-before-this-card',
+            )} linkedId: ${
+              this._id
+            } at client/components/cards/cardDetails.js and https://github.com/wekan/wekan/issues/2785`;
+            alert(message);
+          }
           Utils.goBoardId(this.boardId);
         }),
         'change .js-field-parent-board'(event) {
@@ -844,6 +1002,102 @@ BlazeComponent.extendComponent({
     ];
   },
 }).register('cardMorePopup');
+
+BlazeComponent.extendComponent({
+  onCreated() {
+    this.currentCard = this.currentData();
+    this.voteQuestion = new ReactiveVar(this.currentCard.voteQuestion);
+  },
+
+  events() {
+    return [
+      {
+        'click .js-end-date': Popup.open('editVoteEndDate'),
+        'submit .edit-vote-question'(evt) {
+          evt.preventDefault();
+          const voteQuestion = evt.target.vote.value;
+          const publicVote = $('#vote-public').hasClass('is-checked');
+          const allowNonBoardMembers = $('#vote-allow-non-members').hasClass(
+            'is-checked',
+          );
+          const endString = this.currentCard.getVoteEnd();
+
+          this.currentCard.setVoteQuestion(
+            voteQuestion,
+            publicVote,
+            allowNonBoardMembers,
+          );
+          if (endString) {
+            this.currentCard.setVoteEnd(endString);
+          }
+          Popup.close();
+        },
+        'click .js-remove-vote': Popup.afterConfirm('deleteVote', () => {
+          event.preventDefault();
+          this.currentCard.unsetVote();
+          Popup.close();
+        }),
+        'click a.js-toggle-vote-public'(event) {
+          event.preventDefault();
+          $('#vote-public').toggleClass('is-checked');
+        },
+        'click a.js-toggle-vote-allow-non-members'(event) {
+          event.preventDefault();
+          $('#vote-allow-non-members').toggleClass('is-checked');
+        },
+      },
+    ];
+  },
+}).register('cardStartVotingPopup');
+
+// editVoteEndDatePopup
+(class extends DatePicker {
+  onCreated() {
+    super.onCreated(moment().format('YYYY-MM-DD HH:mm'));
+    this.data().getVoteEnd() && this.date.set(moment(this.data().getVoteEnd()));
+  }
+  events() {
+    return [
+      {
+        'submit .edit-date'(evt) {
+          evt.preventDefault();
+
+          // if no time was given, init with 12:00
+          const time =
+            evt.target.time.value ||
+            moment(new Date().setHours(12, 0, 0)).format('LT');
+
+          const dateString = `${evt.target.date.value} ${time}`;
+          const newDate = moment(dateString, 'L LT', true);
+          if (newDate.isValid()) {
+            // if active vote -  store it
+            if (this.currentData().getVoteQuestion()) {
+              this._storeDate(newDate.toDate());
+              Popup.close();
+            } else {
+              this.currentData().vote = { end: newDate.toDate() }; // set vote end temp
+              Popup.back();
+            }
+          } else {
+            this.error.set('invalid-date');
+            evt.target.date.focus();
+          }
+        },
+        'click .js-delete-date'(evt) {
+          evt.preventDefault();
+          this._deleteDate();
+          Popup.close();
+        },
+      },
+    ];
+  }
+  _storeDate(newDate) {
+    this.card.setVoteEnd(newDate);
+  }
+  _deleteDate() {
+    this.card.unsetVoteEnd();
+  }
+}.register('editVoteEndDatePopup'));
 
 // Close the card details pane by pressing escape
 EscapeActions.register(
